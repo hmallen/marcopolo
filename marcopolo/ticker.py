@@ -63,6 +63,21 @@ class wsTicker(object):
 
             self.db.update_one(
                 {"id": float(data[0])},
+                {"$set": {'last': float(data[1]),
+                          'lowestAsk': float(data[2]),
+                          'highestBid': float(data[3]),
+                          'percentChange': float(data[4]),
+                          'baseVolume': float(data[5]),
+                          'quoteVolume': float(data[6]),
+                          'isFrozen': float(data[7]),
+                          'high24hr': float(data[8]),
+                          'low24hr': float(data[9])
+                          }},
+                upsert=True)
+
+            """
+            self.db.update_one(
+                {"id": float(data[0])},
                 {"$set": {'last': data[1],
                           'lowestAsk': data[2],
                           'highestBid': data[3],
@@ -74,6 +89,7 @@ class wsTicker(object):
                           'low24hr': data[9]
                           }},
                 upsert=True)
+            """
 
 
     def on_error(self, ws, error):
