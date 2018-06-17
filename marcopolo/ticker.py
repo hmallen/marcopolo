@@ -173,7 +173,9 @@ class Ticker(object):
         #print('Thread started')
         logger.debug('Thread started.')
 
-        slack_message = 'Ticker startup initialized.'
+        slack_message = '*_' + str(datetime.datetime.now()) + '_*\n'
+
+        slack_message += 'Ticker startup initialized.'
 
         slack_return = Ticker.send_slack_alert(self, channel_id=self.slack_channel_id_alerts, message=slack_message)
 
