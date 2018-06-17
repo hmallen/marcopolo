@@ -6,7 +6,7 @@ import sys
 from poloniex import Poloniex
 from pymongo import MongoClient
 
-mongo_ip = 'mongodb://192.168.1.129:27017/'
+mongo_ip = 'mongodb://192.168.1.179:27017/'
 
 logging.basicConfig()
 logger = logging.getLogger(__name__)
@@ -25,33 +25,60 @@ class MarcoPolo:
 
         self.polo = Poloniex(polo_api, polo_secret)
 
-        self.db = MongoClient(mongo_ip)
+        self.db = MongoClient(mongo_ip).marcopolo['trades']
 
 
     def create_trade(self, market, buy_target, profit_level, stop_level, stop_price=None,
                      spend_proportion=0.01, price_tolerance=0.001, entry_timeout=5, taker_fee_ok=True):
-        create_trade_result = True
+        create_trade_successful = True
 
         try:
             self.market = market
             logger.debug('self.market: ' + self.market)
 
+            self.base_currency = self.market.split('_')[0]
+            logger.debug('self.base_currency: ' + self.base_currency)
+
+            self.trade_currency = self.market.split('_')[1]
+            logger.debug('self.trade_currency: ' + self.trade_currency)
+
             self.buy_target = buy_target
             logger.debug('self.buy_target: ' + str(self.buy_target))
 
-            self.buy_max = self.buy_target * (1 + price_tolerance)
+            self.buy_max = round(self.buy_target * (1 + price_tolerance), 8)
+            logger.debug('self.buy_max: ' + str(self.buy_max))
+
+            self.spend_proportion = spend_proportion
+            logger.debug('self.spend_proportion: ' + str(self.spend_proportion))
+
+            try:
+                balance_base_currency = self.polo.returnAvailableAccountBalances()['exchange'][self.base_currency]
+                logger.debug('balance_base_currency: ' + str(balance_base_currency))
+
+            except:
+                logger.error(self.base_currency + ' balance currently 0. Unable to continue with trade. Exiting.')
+
+                create_trade_successful = False
+
+                sys.exit(1)
+
+            self.spend_amount = round(balance_base_currency * self.spend_proportion, 8)
+            logger.debug('self.spend_amount: ' + str(self.spend_amount))
+
+            self.buy_amount_target = round(self.spend_amount * self.buy_target, 8)
+            logger.debug('self.buy_amount_target: ' + str(self.buy_amount_target))
 
             self.profit_level = profit_level
             logger.debug('self.profit_level: ' + str(self.profit_level))
 
-            self.sell_price = self.buy_target * (1 + self.profit_level)
+            self.sell_price = round(self.buy_target * (1 + self.profit_level), 8)
             logger.debug('self.sell_price: ' + str(self.sell_price))
 
             self.stop_level = stop_level
             logger.debug('self.stop_level: ' + str(self.stop_level))
 
             if stop_price == None:
-                self.stop_price = self.buy_target * (1 - self.stop_level)
+                self.stop_price = round(self.buy_target * (1 - self.stop_level), 8)
                 logger.debug('self.stop_price: ' + str(self.stop_price))
 
             else:
@@ -62,9 +89,6 @@ class MarcoPolo:
                     logger.error('Invalid parameters. Stop price set equal to or greater than buy target.')
 
                     create_trade_result = False
-
-            self.spend_proportion = spend_proportion
-            logger.debug('self.spend_proportion: ' + str(self.spend_proportion))
 
             self.abort_time = datetime.datetime.now() + datetime.timedelta(minutes=entry_timeout)
             logger.debug('self.abort_time: ' + str(self.abort_time))
@@ -77,17 +101,14 @@ class MarcoPolo:
             self.taker_fee = fee_info['takerFee']
             logger.debug('self.taker_fee: ' + str(self.taker_fee))
 
-            self.base_currency = self.market.split('_')[0]
-            logger.debug('self.base_currency: ' + self.base_currency)
-
-            self.trade_currency = self.market.split('_')[1]
-            logger.debug('self.trade_currency: ' + self.trade_currency)
-
             trade_doc = dict(market=self.market, time=datetime.datetime.now(),
-                             buy=dict(target=self.buy_target,
-                                      max=xyz,
-                                      actual=xyz,
-                                      abort_time=xyz,
+                             buy=dict(price_target=self.buy_target,
+                                      price_max=self.buy_max,
+                                      spend_max=self.spend_max,
+                                      amount_target=self.buy_amount_target,
+                                      price_actual=None,
+                                      amount_actual=None,
+                                      abort_time=self.abort_time,
                                       complete=False),
                              sell=dict(target=self.sell_price,
                                        stop=self.stop_price,
@@ -104,19 +125,34 @@ class MarcoPolo:
                                              entry_timeout=entry_timeout,
                                              taker_fee_ok=taker_fee_ok))
 
+            logger.info('Creating MongoDB trade document.')
+            
+            try:
+                self.db.update_one(
+                    {'_id': self.market},
+                    {'$set': trade_doc},
+                    upsert=True
+                )
+
+            except Exception as e:
+                logger.exception('Exception while creating MongoDB trade document.')
+                logger.exception(e)
+
+                create_trade_successful = False
+
         except Exception as e:
             logger.exception('Exception in create_trade().')
             logger.exception(e)
 
-            create_trade_result = False
+            create_trade_successful = False
 
         finally:
-            return create_trade_result
+            return create_trade_successful
 
 
-    def exec_trade(self):
+    def run_trade_cycle(self):
         try:
-            balances = self.polo.returnAvailableBalances()
+            pass
 
         except Exception as e:
             logger.exception('Exception in exec_trade().')
@@ -143,7 +179,7 @@ if __name__ == '__main__':
     test_spend_proportion = 0.01
     logger.debug('test_spend_proportion: ' + str(test_spend_proportion))
     test_entry_timeout = 5
-    logger.debug('test_entry_timeout: ' + str(test_entry_timmeout))
+    logger.debug('test_entry_timeout: ' + str(test_entry_timeout))
 
     create_trade_result = marcopolo.create_trade(market=test_market, buy_target=test_buy_target,
                                                  profit_level=test_profit_level, stop_level=test_stop_level,

@@ -12,6 +12,7 @@ Poloniex trading instance that may be deployed from a core analysis module.
 <b>To Do:</b>
 - Create "off-book" price monitoring/order execution
 -- Websockets?
+- Need to handle situation for multiple trade execs on same market (or the prevention of it)
 
 <b>Needs Testing:</b>
 -
