@@ -1,11 +1,11 @@
-import websocket
-from pymongo import MongoClient
-
-from poloniex import Poloniex
-
-from multiprocessing.dummy import Process as Thread
 import json
 import logging
+from multiprocessing.dummy import Process as Thread
+import time
+
+from poloniex import Poloniex
+from pymongo import MongoClient
+import websocket
 
 logging.basicConfig()
 logger = logging.getLogger(__name__)
