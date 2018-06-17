@@ -91,7 +91,7 @@ class Ticker(object):
                           }},
                 upsert=True)
 
-            self.last_update = datetime.datetime.now()
+            self.last_update = time.time()
 
 
     def on_error(self, ws, error):
@@ -178,6 +178,48 @@ class Ticker(object):
         slack_return = Ticker.send_slack_alert(self, channel_id=self.slack_channel_id_alerts, message=slack_message)
 
         logger.debug('slack_return: ' + str(slack_return))
+
+
+    def monitor(self, timeout, alert_reset_interval=10):
+        error_timeout = datetime.timedelta(seconds=timeout)
+
+        error_message_sent = False
+
+        error_message_time = None
+
+        error_message_reset = datetime.timedelta(minutes=alert_reset_interval)
+
+        while (True):
+            try:
+                #logger.debug('ticker.last_update: ' + str(ticker.last_update))
+                #if (datetime.datetime.now() - ticker.last_update) > error_timeout:
+                if (time.time() - ticker.last_update) > error_timeout:
+                    if error_message_sent == False:
+                        error_message = '*NO TICKER DATA RECEIVED IN 30 SECONDS. AN ERROR HAS OCCURRED THAT REQUIRES IMMEDIATE ATTENTION.*'
+
+                        slack_return = ticker.send_slack_alert(channel_id=slack_channel_id_alerts, message=error_message)
+
+                        logger.debug('slack_return: ' + str(slack_return))
+
+                        error_message_sent = True
+
+                        error_message_time = datetime.datetime.now()
+
+                if error_message_sent == True and (datetime.datetime.now() - error_message_time) > error_message_reset:
+                    logger.info('Resetting error message sent switch to allow another alert.')
+
+                    error_message_sent = False
+
+                time.sleep(1)
+
+            except Exception as e:
+                logger.exception('Exception in inner loop.')
+                logger.exception(e)
+
+            except KeyboardInterrupt:
+                logger.info('Exit signal raised in Ticker.monitor. Breaking from monitor loop.')
+
+                break
 
 
     def send_slack_alert(self, channel_id, message):
@@ -305,6 +347,7 @@ if __name__ == "__main__":
 
         last_update = ticker.last_update
 
+        """
         error_timeout = datetime.timedelta(seconds=30)
 
         error_message_sent = False
@@ -312,6 +355,7 @@ if __name__ == "__main__":
         error_message_time = None
 
         error_message_reset = datetime.timedelta(minutes=10)
+        """
 
         slack_message = 'Real-time Poloniex ticker data ready for use at ' + mongo_ip_local + '.'
 
@@ -319,12 +363,16 @@ if __name__ == "__main__":
 
         logger.debug('slack_return: ' + str(slack_return))
 
-        logger.info('Beginning monitoring loop.')
+        logger.info('Starting monitor.')
 
+        ticker.monitor(timeout=30, alert_reset_interval=10)
+
+        """
         while (True):
             try:
                 #logger.debug('ticker.last_update: ' + str(ticker.last_update))
-                if (datetime.datetime.now() - ticker.last_update) > error_timeout:
+                #if (datetime.datetime.now() - ticker.last_update) > error_timeout:
+                if (time.time() - ticker.last_update) > error_timeout:
                     if error_message_sent == False:
                         error_message = '*NO TICKER DATA RECEIVED IN 30 SECONDS. AN ERROR HAS OCCURRED THAT REQUIRES IMMEDIATE ATTENTION.*'
 
@@ -351,8 +399,10 @@ if __name__ == "__main__":
                 logger.info('Exit signal raised in inner try/except. Breaking from inner loop.')
 
                 break
+        """
 
-        logger.info('Exited inner loop.')
+        #logger.info('Exited inner loop.')
+        logger.info('Exited monitor.')
 
         """
         for i in range(5):
