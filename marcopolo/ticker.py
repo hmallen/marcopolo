@@ -181,7 +181,7 @@ class Ticker(object):
 
 
     def monitor(self, timeout, alert_reset_interval=10):
-        error_timeout = datetime.timedelta(seconds=timeout)
+        error_timeout = timeout
 
         error_message_sent = False
 
