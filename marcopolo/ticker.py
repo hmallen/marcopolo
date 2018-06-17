@@ -145,7 +145,9 @@ class Ticker(object):
         #print('Populated markets database with ticker data')
         logger.debug('Populated markets database with ticker data from REST API.')
 
-        slack_message = 'MongoDB populated with REST API market ticker data.'
+        slack_message = '*_Ticker startup initialized at ' + str(datetime.datetime.now()) + '._*\n\n'
+
+        slack_message += 'MongoDB populated with REST API market ticker data.'
 
         slack_return = Ticker.send_slack_alert(self, channel_id=self.slack_channel_id_alerts, message=slack_message)
 
@@ -173,9 +175,7 @@ class Ticker(object):
         #print('Thread started')
         logger.debug('Thread started.')
 
-        slack_message = '*_' + str(datetime.datetime.now()) + '_*\n'
-
-        slack_message += 'Ticker startup initialized.'
+        slack_message = 'Ticker startup initialized.'
 
         slack_return = Ticker.send_slack_alert(self, channel_id=self.slack_channel_id_alerts, message=slack_message)
 
@@ -190,7 +190,7 @@ class Ticker(object):
         #print('Thread joined')
         logger.debug('Thread joined.')
 
-        slack_message = 'Ticker shutdown complete.'
+        slack_message = 'Ticker shutdown complete.\n'
 
         slack_return = Ticker.send_slack_alert(self, channel_id=self.slack_channel_id_alerts, message=slack_message)
 
