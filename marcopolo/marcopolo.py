@@ -27,6 +27,8 @@ class MarcoPolo:
 
         self.db = MongoClient(mongo_ip).marcopolo['trades']
 
+        self.ticker = MongoClient(mongo_ip).poloniex['ticker']
+
 
     def create_trade(self, market, buy_target, profit_level, stop_level, stop_price=None,
                      spend_proportion=0.01, price_tolerance=0.001, entry_timeout=5, taker_fee_ok=True):
@@ -126,7 +128,7 @@ class MarcoPolo:
                                              taker_fee_ok=taker_fee_ok))
 
             logger.info('Creating MongoDB trade document.')
-            
+
             try:
                 self.db.update_one(
                     {'_id': self.market},
@@ -152,6 +154,9 @@ class MarcoPolo:
 
     def run_trade_cycle(self):
         try:
+            # If market price above (buy target * (1 - price_tolerance)), set limit sell
+            # If market price below (buy target * (1 - price_tolerance)), remove limit sell and place stop-loss
+
             pass
 
         except Exception as e:

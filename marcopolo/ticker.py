@@ -19,7 +19,20 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-class Ticker(object):
+class Ticker:
+
+    def __init__(self):
+        self.db = MongoClient(mongo_ip).poloniex['ticker']
+
+
+    def __call__(self, market=None):
+        if market:
+            return self.db.find_one({'_id': market})
+
+        return list(self.db.find())
+
+
+class TickerGenerator(object):
 
     def __init__(self, slack_info, mongo_ip):
         self.api = Poloniex()
@@ -44,7 +57,6 @@ class Ticker(object):
 
 
     def __call__(self, market=None):
-        """ returns ticker from mongodb """
         if market:
             return self.db.find_one({'_id': market})
 
@@ -101,7 +113,8 @@ class Ticker(object):
         slack_message = 'Error returned from websocket connection:\n'
         slack_message += str(error)
 
-        slack_return = Ticker.send_slack_alert(self, channel_id=self.slack_channel_id_alerts, message=slack_message)
+        #slack_return = Ticker.send_slack_alert(self, channel_id=self.slack_channel_id_alerts, message=slack_message)
+        slack_return = TickerGenerator.send_slack_alert(self, channel_id=self.slack_channel_id_alerts, message=slack_message)
 
         logger.debug('slack_return: ' + str(slack_return))
 
@@ -112,7 +125,8 @@ class Ticker(object):
 
         slack_message = 'Websocket closed.'
 
-        slack_return = Ticker.send_slack_alert(self, channel_id=self.slack_channel_id_alerts, message=slack_message)
+        #slack_return = Ticker.send_slack_alert(self, channel_id=self.slack_channel_id_alerts, message=slack_message)
+        slack_return = TickerGenerator.send_slack_alert(self, channel_id=self.slack_channel_id_alerts, message=slack_message)
 
         logger.debug('slack_return: ' + str(slack_return))
 
@@ -131,7 +145,8 @@ class Ticker(object):
 
         slack_message = 'MongoDB populated with REST API market ticker data.'
 
-        slack_return = Ticker.send_slack_alert(self, channel_id=self.slack_channel_id_alerts, message=slack_message)
+        #slack_return = Ticker.send_slack_alert(self, channel_id=self.slack_channel_id_alerts, message=slack_message)
+        slack_return = TickerGenerator.send_slack_alert(self, channel_id=self.slack_channel_id_alerts, message=slack_message)
 
         logger.debug('slack_return: ' + str(slack_return))
 
@@ -142,7 +157,8 @@ class Ticker(object):
 
         slack_message = 'Subscribed to ticker websocket.'
 
-        slack_return = Ticker.send_slack_alert(self, channel_id=self.slack_channel_id_alerts, message=slack_message)
+        #slack_return = Ticker.send_slack_alert(self, channel_id=self.slack_channel_id_alerts, message=slack_message)
+        slack_return = TickerGenerator.send_slack_alert(self, channel_id=self.slack_channel_id_alerts, message=slack_message)
 
         logger.debug('slack_return: ' + str(slack_return))
 
@@ -160,7 +176,8 @@ class Ticker(object):
         #slack_message = 'Ticker startup initialized.'
         slack_message = '*_Ticker startup initialized at ' + str(datetime.datetime.now()) + '._*\n\n'
 
-        slack_return = Ticker.send_slack_alert(self, channel_id=self.slack_channel_id_alerts, message=slack_message)
+        #slack_return = Ticker.send_slack_alert(self, channel_id=self.slack_channel_id_alerts, message=slack_message)
+        slack_return = TickerGenerator.send_slack_alert(self, channel_id=self.slack_channel_id_alerts, message=slack_message)
 
         logger.debug('slack_return: ' + str(slack_return))
 
@@ -175,7 +192,8 @@ class Ticker(object):
 
         slack_message = 'Ticker shutdown complete.\n'
 
-        slack_return = Ticker.send_slack_alert(self, channel_id=self.slack_channel_id_alerts, message=slack_message)
+        #slack_return = Ticker.send_slack_alert(self, channel_id=self.slack_channel_id_alerts, message=slack_message)
+        slack_return = TickerGenerator.send_slack_alert(self, channel_id=self.slack_channel_id_alerts, message=slack_message)
 
         logger.debug('slack_return: ' + str(slack_return))
 
@@ -217,7 +235,7 @@ class Ticker(object):
                 logger.exception(e)
 
             except KeyboardInterrupt:
-                logger.info('Exit signal raised in Ticker.monitor. Breaking from monitor loop.')
+                logger.info('Exit signal raised in TickerGenerator.monitor. Breaking from monitor loop.')
 
                 break
 
@@ -235,7 +253,7 @@ class Ticker(object):
             )
 
         except Exception as e:
-            logger.exception('Exception raised in Ticker.send_slack_alert().')
+            logger.exception('Exception raised in TickerGenerator.send_slack_alert().')
             logger.exception(e)
 
             alert_return['Exception'] = True
@@ -330,22 +348,30 @@ if __name__ == "__main__":
 
         # websocket.enableTrace(True)
 
-        ticker = Ticker(slack_info=slack_info, mongo_ip=mongo_ip_local)
+        #ticker = Ticker(slack_info=slack_info, mongo_ip=mongo_ip_local)
+        ticker_generator = TickerGenerator(slack_info=slack_info, mongo_ip=mongo_ip_local)
 
-        logger.info('Starting ticker thread.')
+        #logger.info('Starting ticker thread.')
+        logger.info('Starting ticker generator in separate thread.')
 
-        ticker.start()
+        #ticker.start()
+        ticker_generator.start()
 
-        logger.info('Waiting for ticker to be ready.')
+        #logger.info('Waiting for ticker to be ready.')
+        logger.info('Waiting for ticker generator to be ready.')
 
-        while ticker.last_update == None:
-            logger.debug('ticker.last_update: ' + str(ticker.last_update))
+        #while ticker.last_update == None:
+        while ticker_generator.last_update == None:
+            #logger.debug('ticker.last_update: ' + str(ticker.last_update))
+            logger.debug('ticker_generator.last_update: ' + str(ticker_generator.last_update))
 
             time.sleep(1)
 
-        logger.debug('ticker.last_update: ' + str(ticker.last_update))
+        #logger.debug('ticker.last_update: ' + str(ticker.last_update))
+        logger.debug('ticker_generator.last_update: ' + str(ticker_generator.last_update))
 
-        last_update = ticker.last_update
+        #last_update = ticker.last_update
+        last_update = ticker_generator.last_update
 
         """
         error_timeout = datetime.timedelta(seconds=30)
@@ -359,13 +385,15 @@ if __name__ == "__main__":
 
         slack_message = 'Real-time Poloniex ticker data ready for use at ' + mongo_ip_local + '.'
 
-        slack_return = ticker.send_slack_alert(channel_id=slack_channel_id_alerts, message=slack_message)
+        #slack_return = ticker.send_slack_alert(channel_id=slack_channel_id_alerts, message=slack_message)
+        slack_return = ticker_generator.send_slack_alert(channel_id=slack_channel_id_alerts, message=slack_message)
 
         logger.debug('slack_return: ' + str(slack_return))
 
         logger.info('Starting monitor.')
 
-        ticker.monitor(timeout=30, alert_reset_interval=10)
+        #ticker.monitor(timeout=30, alert_reset_interval=10)
+        ticker_generator.monitor(timeout=30, alert_reset_interval=10)
 
         """
         while (True):
