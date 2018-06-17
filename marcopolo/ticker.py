@@ -91,22 +91,6 @@ class Ticker(object):
                           }},
                 upsert=True)
 
-            """
-            self.db.update_one(
-                {"id": float(data[0])},
-                {"$set": {'last': data[1],
-                          'lowestAsk': data[2],
-                          'highestBid': data[3],
-                          'percentChange': data[4],
-                          'baseVolume': data[5],
-                          'quoteVolume': data[6],
-                          'isFrozen': data[7],
-                          'high24hr': data[8],
-                          'low24hr': data[9]
-                          }},
-                upsert=True)
-            """
-
             self.last_update = datetime.datetime.now()
 
 
