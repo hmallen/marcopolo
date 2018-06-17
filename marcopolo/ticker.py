@@ -211,11 +211,13 @@ class TickerGenerator(object):
             try:
                 #logger.debug('ticker.last_update: ' + str(ticker.last_update))
                 #if (datetime.datetime.now() - ticker.last_update) > error_timeout:
-                if (time.time() - ticker.last_update) > error_timeout:
+                #if (time.time() - ticker.last_update) > error_timeout:
+                if (time.time() - self.last_update) > error_timeout:
                     if error_message_sent == False:
                         error_message = '*NO TICKER DATA RECEIVED IN 30 SECONDS. AN ERROR HAS OCCURRED THAT REQUIRES IMMEDIATE ATTENTION.*'
 
-                        slack_return = ticker.send_slack_alert(channel_id=slack_channel_id_alerts, message=error_message)
+                        #slack_return = ticker.send_slack_alert(channel_id=slack_channel_id_alerts, message=error_message)
+                        slack_return = TickerGenerator.send_slack_alert(self, channel_id=self.slack_channel_id_alerts, message=error_message)
 
                         logger.debug('slack_return: ' + str(slack_return))
 
