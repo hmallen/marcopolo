@@ -169,7 +169,7 @@ class TickerGenerator(object):
         logger.debug('Thread started.')
 
         #slack_message = 'Ticker startup initialized.'
-        slack_message = '*_Ticker startup initialized at ' + str(datetime.datetime.now()) + '._*\n\n'
+        slack_message = '\n*_Ticker startup initialized at ' + str(datetime.datetime.now()) + '._*\n\n'
 
         #slack_return = Ticker.send_slack_alert(self, channel_id=self.slack_channel_id_alerts, message=slack_message)
         slack_return = TickerGenerator.send_slack_alert(self, channel_id=self.slack_channel_id_alerts, message=slack_message)
@@ -185,7 +185,7 @@ class TickerGenerator(object):
         #print('Thread joined')
         logger.debug('Thread joined.')
 
-        slack_message = 'Ticker shutdown complete.\n'
+        slack_message = '*TICKER SHUTDOWN COMPLETED AT ' + str(datetime.datetime.now()) + '.*
 
         #slack_return = Ticker.send_slack_alert(self, channel_id=self.slack_channel_id_alerts, message=slack_message)
         slack_return = TickerGenerator.send_slack_alert(self, channel_id=self.slack_channel_id_alerts, message=slack_message)
@@ -201,6 +201,13 @@ class TickerGenerator(object):
         error_message_time = None
 
         error_message_reset = datetime.timedelta(minutes=alert_reset_interval)
+
+        slack_message = '*MONITOR ACTIVE. TICKER READY FOR USE.*'
+
+        #slack_return = ticker.send_slack_alert(channel_id=slack_channel_id_alerts, message=error_message)
+        slack_return = TickerGenerator.send_slack_alert(self, channel_id=self.slack_channel_id_alerts, message=slack_message)
+
+        logger.debug('slack_return: ' + str(slack_return))
 
         while (True):
             try:
