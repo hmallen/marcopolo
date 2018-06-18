@@ -185,7 +185,7 @@ class TickerGenerator(object):
         #print('Thread joined')
         logger.debug('Thread joined.')
 
-        slack_message = '*TICKER SHUTDOWN COMPLETED AT ' + str(datetime.datetime.now()) + '.*
+        slack_message = '*TICKER SHUTDOWN COMPLETED AT ' + str(datetime.datetime.now()) + '.*'
 
         #slack_return = Ticker.send_slack_alert(self, channel_id=self.slack_channel_id_alerts, message=slack_message)
         slack_return = TickerGenerator.send_slack_alert(self, channel_id=self.slack_channel_id_alerts, message=slack_message)
