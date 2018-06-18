@@ -1,3 +1,4 @@
+import configparser
 import datetime
 import logging
 import os
@@ -17,9 +18,7 @@ logger.setLevel(logging.DEBUG)
 
 
 class MarcoPolo:
-    def __init__(self, config_path):
-        import configparser
-
+    def __init__(self, config_path, ws_ticker=True):
         config = configparser.ConfigParser()
         config.read(config_path)
 
@@ -32,6 +31,8 @@ class MarcoPolo:
 
         #self.ticker = MongoClient(mongo_ip).poloniex['ticker']
         self.ticker = Ticker(mongo_ip)
+
+        self.ws_ticker = ws_ticker
 
 
     def create_trade(self, market, buy_target, profit_level, stop_level, stop_price=None,
@@ -118,9 +119,13 @@ class MarcoPolo:
                                       complete=False,
                                       orders=[]),
                              sell=dict(target=self.sell_price,
+                                       amount=None,
                                        stop=self.stop_price,
+                                       threshold=None,
                                        actual=None,
                                        complete=False,
+                                       order_number=None,
+                                       stop_active=None,
                                        orders=[]),
                              fees=dict(maker=self.maker_fee, taker=self.taker_fee),
                              parameters=dict(market=market,
@@ -160,9 +165,6 @@ class MarcoPolo:
 
     def run_trade_cycle(self):
         try:
-            # If market price above (buy target * (1 - price_tolerance)), set limit sell
-            # If market price below (buy target * (1 - price_tolerance)), remove limit sell and place stop-loss
-
             trade_doc = self.db.find_one({'_id': self.market})
 
             ## Entry buy ##
@@ -174,58 +176,77 @@ class MarcoPolo:
             amount_total = 0
 
             while entry_buy_complete == False:
-                if self.taker_fee_ok == True:
-                    # Place immediateOrCancel buy at lowest ask
-                    # If spend amount filled, break
-                    # If not, check if next lowest ask below max buy price
-                    # If yes, place another immediateOrCancel buy at lowest ask
-                    # Continue until spend amount fulfilled or timeout
+                try:
+                    if self.taker_fee_ok == True:
+                        # Place immediateOrCancel buy at lowest ask
+                        # If spend amount filled, break
+                        # If not, check if next lowest ask below max buy price
+                        # If yes, place another immediateOrCancel buy at lowest ask
+                        # Continue until spend amount fulfilled or timeout
 
-                    lowest_ask = self.ticker(self.market)['lowestAsk']
-                    logger.debug('lowest_ask: ' + str(lowest_ask))
+                        if self.ws_ticker == True:
+                            lowest_ask = self.ticker(self.market)['lowestAsk
+                        else:
+                            lowest_ask = self.polo.returnTicker()[self.market]['lowestAsk']
+                        logger.debug('lowest_ask: ' + str(lowest_ask))
 
-                    if lowest_ask <= self.buy_max:
-                        buy_amount = round(lowest_ask * (trade_doc['buy']['spend'] - spend_total), 8)
-                        logger.debug('buy_amount: ' + str(buy_amount))
+                        if lowest_ask <= self.buy_max:
+                            buy_amount = round(lowest_ask * (trade_doc['buy']['spend'] - spend_total), 8)
+                            logger.debug('buy_amount: ' + str(buy_amount))
 
-                        result = polo.buy(currencyPair=self.market, rate=lowest_ask, amount=buy_amount, immediateOrCancel=True)
-
-                        if len(result['resultingTrades']) > 0:
-                            trade_doc['buy']['orders'].append(result)
-
-                            for trade in result['resultingTrades']:
-                                spend_total += trade['total']
-                                amount_total += trade['amount']
-
-                            if result['amountUnfilled'] == 0:
-                                logger.info('Entry buy complete.')
+                            if buy_amount <= 0:
+                                logger.info('Buy amount satisfied.')
 
                                 entry_buy_complete = True
 
+                                break
+
+                            result = polo.buy(currencyPair=self.market, rate=lowest_ask, amount=buy_amount, immediateOrCancel=1)
+
+                            if len(result['resultingTrades']) > 0:
+                                trade_doc['buy']['orders'].append(result)
+
+                                for trade in result['resultingTrades']:
+                                    spend_total += trade['total']
+                                    amount_total += trade['amount']
+
+                                if result['amountUnfilled'] == 0:
+                                    logger.info('Entry buy complete.')
+
+                                    entry_buy_complete = True
+
+                                else:
+                                    logger.info('Partial buy filled. Continuing.')
+
                             else:
-                                pass
-
-                        else:
-                            pass
-
-                else:
-                    pass
-
-                if datetime.datetime.now() >= self.abort_time:
-                    logger.warning('Entry buy not completed before timeout reached.')
-
-                    # If no buys executed
-                    if spend_total == 0:
-                        logger.warning('No buys executed. Removing trade document and exiting.')
-
-                        delete_result = self.db.delete_one({'_id': self.market})
-
-                        break
+                                logger.info('Buy not executed at requested price. Recalculating and trying again.')
 
                     else:
-                        entry_buy_complete = True
+                        # Create "BFB" order that follows price
+                        pass
 
-                        logger.warning('Continuing trade cycle with partial buy amount.')
+                    if datetime.datetime.now() >= self.abort_time:
+                        logger.warning('Entry buy not completed before timeout reached.')
+
+                        # If no buys executed
+                        if spend_total == 0:
+                            logger.warning('No buys executed. Removing trade document and exiting.')
+
+                            delete_result = self.db.delete_one({'_id': self.market})
+                            logger.debug('delete_result: ' + str(delete_result))
+
+                            break
+
+                        else:
+                            entry_buy_complete = True
+
+                            logger.warning('Continuing trade cycle with partial buy amount.')
+
+                    time.sleep(0.2)     # To keep API calls to under 6 per second (very conservatively)
+
+                except Exception as e:
+                    logger.exception('Exception while placing entry buy.')
+                    logger.exception(e)
 
             if entry_buy_complete == True:
                 trade_doc['buy']['spend_actual'] = spend_total
@@ -234,13 +255,212 @@ class MarcoPolo:
 
                 trade_doc['buy']['complete'] = True
 
-            else:
-                # DELETE THE TRADE DOC
+                trade_doc['sell']['amount'] = amount_total
 
-                pass
+                update_result = self.db.update_one({'_id': self.market}, {'$set': trade_doc}, upsert=True)
+                logger.debug('update_result.matched_count: ' + str(update_result.matched_count))
+                logger.debug('update_result.modified_count: ' + str(update_result.modified_count))
+
+            else:
+                # Delete the trade doc and exit
+                logger.warning('Could not complete any portion of entry buy. Exiting.')
+
+                sys.exit()
+
+            trade_doc = self.db.find_one({'_id': self.market})
+
+            while (True):
+                try:
+                    ## Place sell order ##
+                    result = polo.sell(currencyPair=self.market, rate=self.sell_price, amount=trade_doc['sell']['target'])
+
+                    trade_doc['sell']['order'] = result['orderNumber']
+
+                    trade_doc['sell']['orders'].append(result)
+
+                    update_result - self.db.update_one({'_id': self.market}, {'$set': trade_doc})
+                    logger.debug('update_result.matched_count: ' + str(update_result.matched_count))
+                    logger.debug('update_result.modified_count: ' + str(update_result.modified_count))
+
+                    break
+
+                except Exception as e:
+                    logger.exception(e)
+
+                    logger.warning('Failed to place sell order. Retrying in 30 seconds.')
+
+                    time.sleep(30)
+
+            logger.info('Sell order placed at ' + str(self.sell_price) + ' ' + self.base_currency + '.')
+
+            ## Monitor conditions in real-time
+
+            stop_active = False
+
+            trade_doc['sell']['stop_active'] = stop_active
+
+            if trade_doc['buy']['price_actual'] < self.buy_target:
+                baseline = trade_doc['buy']['price_actual']
+
+            else:
+                baseline = self.buy_target
+
+            self.threshold = round(baseline - ((baseline - self.stop_price) * self.price_tolerance), 8)
+
+            trade_doc['sell']['threshold'] = self.threshold
+            logger.debug('trade_doc[\'sell\'][\'threshold\']: ' + str(trade_doc['sell']['threshold']))
+
+            update_result = self.db.update_one({'_id': self.market}, {'$set': trade_doc})
+            logger.debug('update_result.matched_count: ' + str(update_result.matched_count))
+            logger.debug('update_result.modified_count: ' + str(update_result.modified_count))
+
+            while (True):
+                try:
+                    ## Monitor price and execute stop-loss if necessary ##
+
+                    # If market price above (buy_target * (1 - price_tolerance)), set limit sell
+                    # If market price below (buy_target * (1 - price_tolerance)), remove limit sell and monitor for stop-loss execution trigger
+
+                    # Limit sell currently on book
+                    if stop_active == False:
+                        if self.ws_ticker == True:
+                            highest_bid = self.ticker(self.market)['highestBid']
+                        else:
+                            highest_bid = self.polo.returnTicker()[self.market]['highestBid']
+                        logger.debug('highest_bid: ' + str(highest_bid))
+
+                        if highest_bid < self.threshold:
+                            while (True):
+                                # Remove sell order
+                                cancel_result = polo.cancelOrder(trade_doc['sell']['order'])
+                                logger.debug('cancel_result: ' + str(cancel_result))
+
+                                logger.info(cancel_result['message'])
+
+                                if cancel_result['success'] == 1:
+                                    trade_doc['sell']['orders'].append(cancel_result)
+
+                                    logger.info('Sell order cancelled successfully.')
+
+                                    logger.info('Setting stop-loss monitor to active.')
+
+                                    stop_active = True
+
+                                    trade_doc['sell']['stop_active'] = True
+
+                                    update_result = self.db.update_one({'_id': self.market}, {'$set': trade_doc})
+                                    logger.debug('update_result.matched_count: ' + str(update_result.matched_count))
+                                    logger.debug('update_result.modified_count: ' + str(update_result.modified_count))
+
+                                    break
+
+                    ## Stop-loss monitoring active
+                    else:
+                        while (True):
+                            # Monitor for stop-loss condition and execute if necessary
+                            if self.ws_ticker == True:
+                                highest_bid = self.ticker(self.market)['highestBid']
+                            else:
+                                highest_bid = polo.returnTicker()[self.market]['highestBid']
+                            logger.debug('highest_bid: ' + str(highest_bid))
+
+                            if highest_bid > self.threshold:
+                                while (True):
+                                    try:
+                                        ## Place sell order ##
+                                        result = polo.sell(currencyPair=self.market, rate=self.sell_price, amount=trade_doc['sell']['target'])
+
+                                        trade_doc['sell']['order'] = result['orderNumber']
+
+                                        update_result - self.db.update_one({'_id': self.market}, {'$set': trade_doc})
+                                        logger.debug('update_result.matched_count: ' + str(update_result.matched_count))
+                                        logger.debug('update_result.modified_count: ' + str(update_result.modified_count))
+
+                                        break
+
+                                    except Exception as e:
+                                        logger.exception(e)
+
+                                        logger.warning('Failed to place sell order. Retrying in 30 seconds.')
+
+                                        time.sleep(30)
+
+                                logger.info('Sell order placed at ' + str(self.sell_price) + ' ' + self.base_currency + '.')
+
+                                logger.info('Setting stop-loss monitor to inactive.')
+
+                                stop_active = False
+
+                                trade_doc['sell']['stop_active'] = False
+
+                                update_result = self.db.update_one({'_id': self.market}, {'$set': trade_doc})
+                                logger.debug('update_result.matched_count: ' + str(update_result.matched_count))
+                                logger.debug('update_result.modified_count: ' + str(update_result.modified_count))
+
+                            elif highest_bid <= (self.stop_price * (1 + self.price_tolerance)):
+                                # Begin orderbook checks for stop-loss triggering
+                                if self.ws_ticker == True:
+                                    highest_bid = self.ticker(self.market)['highestBid']
+                                else:
+                                    highest_bid = polo.returnTicker()[self.market]['highestBid']
+                                logger.debug('highest_bid: ' + str(highest_bid))
+
+                                while highest_bid <= (self.stop_price * (1 + self.price_tolerance)):
+                                    ob = polo.returnOrderBook(currencyPair=self.market)
+
+                                    amount_total = 0
+                                    for bid in ob['bids']:
+                                        amount_total += bid[1]
+
+                                        if amount_total >= trade_doc['sell']['amount']:
+                                            if bid[0] <= self.stop_price:
+                                                ## Execute stop-loss order ##
+
+                                                sell_price = self.stop_price
+
+                                                sold_total = 0
+
+                                                while (True):
+                                                    if self.ws_ticker == True:
+                                                        highest_bid = ticker(self.market)['highestBid']
+                                                    else:
+                                                        highest_bid = self.polo.returnTicker()[self.market]
+                                                    logger.debug('highest_bid: ' + str(highest_bid))
+
+                                                    if highest_bid < sell_price:
+                                                        sell_price = highest_bid
+
+                                                    result = polo.sell(currencyPair=self.market, rate=sell_price,
+                                                                       amount=trade_doc['sell']['amount'], immedateOrCancel=1)
+
+                                                    if len(result['resultingTrades']) > 0:
+                                                        trade_doc['sell']['orders'].append(result)
+
+                                                        for trade in result['resultingTrades']:
+                                                            sold_total += trade['amount']
+
+                                                        if result['amountUnfilled'] == 0:
+                                                            logger.info('Stop-loss order executed successfully.')
+
+                                                            break
+
+                                                        else:
+                                                            logger.info('Sell partially filled. Continuing.')
+
+                                                    else:
+                                                        logger.info('Sell not executed at requested price. Recalculating and trying again.')
+
+                                    time.sleep(0.2)
+
+
+                    time.sleep(0.2)
+
+                except Exception as e:
+                    logger.exception('Exception while monitoring sell conditions.')
+                    logger.exception(e)
 
         except Exception as e:
-            logger.exception('Exception in exec_trade().')
+            logger.exception('Exception in run_trade_cycle().')
             logger.exception(e)
 
 

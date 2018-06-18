@@ -9,6 +9,11 @@ websocket-client = "*"
 slackclient = "*"
 pymongo = {extras = ["tls"]}
 dnspython = "*"
+autobahn = {extras = ["ayncio"]}
+pyopenssl = "*"
+service-identity = "*"
+"pypiwin32" = "*"
+asyncio = "*"
 
 [dev-packages]
 

@@ -61,6 +61,8 @@ class TickerGenerator(object):
     def on_message(self, ws, message):
         message = json.loads(message)
 
+        #print(message)
+
         if 'error' in message:
             #print(message['error'])
             logger.error(message['error'])
@@ -216,7 +218,8 @@ class TickerGenerator(object):
                 #if (time.time() - ticker.last_update) > error_timeout:
                 if (time.time() - self.last_update) > error_timeout:
                     if error_message_sent == False:
-                        error_message = '*NO TICKER DATA RECEIVED IN 30 SECONDS. AN ERROR HAS OCCURRED THAT REQUIRES IMMEDIATE ATTENTION.*'
+                        error_message = '*NO TICKER DATA RECEIVED IN 30 SECONDS.*\n'
+                        error_message += 'Restarting websocket connection.'
 
                         #slack_return = ticker.send_slack_alert(channel_id=slack_channel_id_alerts, message=error_message)
                         slack_return = TickerGenerator.send_slack_alert(self, channel_id=self.slack_channel_id_alerts, message=error_message)
@@ -226,6 +229,20 @@ class TickerGenerator(object):
                         error_message_sent = True
 
                         error_message_time = datetime.datetime.now()
+
+                        logger.info('Stopping websocket connection.')
+
+                        TickerGenerator.stop(self)
+
+                        time.sleep(5)
+
+                        logger.info('Restarting websocket connection.')
+
+                        TickerGenerator.start(self)
+
+                        time.sleep(5)
+
+                        logger.info('Websocket connection restored.')
 
                 if error_message_sent == True and (datetime.datetime.now() - error_message_time) > error_message_reset:
                     logger.info('Resetting error message sent switch to allow another alert.')
