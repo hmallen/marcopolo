@@ -19,19 +19,6 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-class Ticker:
-
-    def __init__(self):
-        self.db = MongoClient(mongo_ip).poloniex['ticker']
-
-
-    def __call__(self, market=None):
-        if market:
-            return self.db.find_one({'_id': market})
-
-        return list(self.db.find())
-
-
 class TickerGenerator(object):
 
     def __init__(self, slack_info, mongo_ip):
@@ -264,6 +251,19 @@ class TickerGenerator(object):
             return alert_return
 
 
+class Ticker:
+
+    def __init__(self, mongo_ip):
+        self.db = MongoClient(mongo_ip).poloniex['ticker']
+
+
+    def __call__(self, market=None):
+        if market:
+            return self.db.find_one({'_id': market})
+
+        return list(self.db.find())
+
+
 if __name__ == "__main__":
     try:
         config = configparser.ConfigParser()
@@ -397,51 +397,8 @@ if __name__ == "__main__":
         #ticker.monitor(timeout=30, alert_reset_interval=10)
         ticker_generator.monitor(timeout=30, alert_reset_interval=10)
 
-        """
-        while (True):
-            try:
-                #logger.debug('ticker.last_update: ' + str(ticker.last_update))
-                #if (datetime.datetime.now() - ticker.last_update) > error_timeout:
-                if (time.time() - ticker.last_update) > error_timeout:
-                    if error_message_sent == False:
-                        error_message = '*NO TICKER DATA RECEIVED IN 30 SECONDS. AN ERROR HAS OCCURRED THAT REQUIRES IMMEDIATE ATTENTION.*'
-
-                        slack_return = ticker.send_slack_alert(channel_id=slack_channel_id_alerts, message=error_message)
-
-                        logger.debug('slack_return: ' + str(slack_return))
-
-                        error_message_sent = True
-
-                        error_message_time = datetime.datetime.now()
-
-                if error_message_sent == True and (datetime.datetime.now() - error_message_time) > error_message_reset:
-                    logger.info('Resetting error message sent switch to allow another alert.')
-
-                    error_message_sent = False
-
-                time.sleep(1)
-
-            except Exception as e:
-                logger.exception('Exception in inner loop.')
-                logger.exception(e)
-
-            except KeyboardInterrupt:
-                logger.info('Exit signal raised in inner try/except. Breaking from inner loop.')
-
-                break
-        """
-
         #logger.info('Exited inner loop.')
         logger.info('Exited monitor.')
-
-        """
-        for i in range(5):
-            sleep(10)
-            pprint.pprint(ticker('USDT_BTC'))
-            pprint.pprint(ticker('BTC_STR'))
-            pprint.pprint(ticker('USDT_STR'))
-        ticker.stop()
-        """
 
     except Exception as e:
         logger.exception('Exception in outer loop.')
@@ -453,6 +410,7 @@ if __name__ == "__main__":
     finally:
         logger.info('Shutting down ticker.')
 
-        ticker.stop()
+        #ticker.stop()
+        ticker_generator.stop()
 
         logger.info('Exiting.')

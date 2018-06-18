@@ -2,9 +2,12 @@ import datetime
 import logging
 import os
 import sys
+import time
 
 from poloniex import Poloniex
 from pymongo import MongoClient
+
+from ticker import Ticker
 
 mongo_ip = 'mongodb://192.168.1.179:27017/'
 
@@ -27,7 +30,8 @@ class MarcoPolo:
 
         self.db = MongoClient(mongo_ip).marcopolo['trades']
 
-        self.ticker = MongoClient(mongo_ip).poloniex['ticker']
+        #self.ticker = MongoClient(mongo_ip).poloniex['ticker']
+        self.ticker = Ticker(mongo_ip)
 
 
     def create_trade(self, market, buy_target, profit_level, stop_level, stop_price=None,
@@ -67,8 +71,8 @@ class MarcoPolo:
             self.spend_amount = round(balance_base_currency * self.spend_proportion, 8)
             logger.debug('self.spend_amount: ' + str(self.spend_amount))
 
-            self.buy_amount_target = round(self.spend_amount * self.buy_target, 8)
-            logger.debug('self.buy_amount_target: ' + str(self.buy_amount_target))
+            #self.buy_amount_target = round(self.spend_amount * self.buy_target, 8)
+            #logger.debug('self.buy_amount_target: ' + str(self.buy_amount_target))
 
             self.profit_level = profit_level
             logger.debug('self.profit_level: ' + str(self.profit_level))
@@ -104,18 +108,19 @@ class MarcoPolo:
             logger.debug('self.taker_fee: ' + str(self.taker_fee))
 
             trade_doc = dict(market=self.market, time=datetime.datetime.now(),
-                             buy=dict(price_target=self.buy_target,
-                                      price_max=self.buy_max,
-                                      spend_max=self.spend_max,
-                                      amount_target=self.buy_amount_target,
+                             buy=dict(target=self.buy_target,
+                                      max=self.buy_max,
+                                      spend=self.spend_amount,
                                       price_actual=None,
                                       amount_actual=None,
                                       abort_time=self.abort_time,
-                                      complete=False),
+                                      complete=False,
+                                      order_number=None),
                              sell=dict(target=self.sell_price,
                                        stop=self.stop_price,
                                        actual=None,
-                                       complete=False),
+                                       complete=False,
+                                       order_number=None),
                              fees=dict(maker=self.maker_fee, taker=self.taker_fee),
                              parameters=dict(market=market,
                                              buy_target=buy_target,
@@ -157,7 +162,45 @@ class MarcoPolo:
             # If market price above (buy target * (1 - price_tolerance)), set limit sell
             # If market price below (buy target * (1 - price_tolerance)), remove limit sell and place stop-loss
 
-            pass
+            ## Entry buy ##
+            entry_buy_complete = False
+
+            while entry_buy_complete == False:
+                if self.taker_fee_ok == True:
+                    # Place immediateOrCancel buy at lowest ask
+                    # If spend amount filled, break
+                    # If not, check if next lowest ask below max buy price
+                    # If yes, place another immediateOrCancel buy at lowest ask
+                    # Continue until spend amount fulfilled or timeout
+
+                    lowest_ask = self.ticker(self.market)['lowestAsk']
+
+                    if lowest_ask <= self.buy_max:
+                        result = polo.buy(currencyPair=self.market, immediateOrCancel=True)
+
+                else:
+                    pass
+
+                if datetime.datetime.now() >= self.abort_time:
+                    logger.warning('Entry buy not completed before timeout reached.')
+
+                    # IF PARTIAL BUY MADE
+                    #entry_buy_complete = True
+                    #logger.warning('Continuing trade cycle with partial buy.')
+
+                    # IF NO PARTIAL BUY MADE
+                    #logger.warning('Removing trade document and exiting.')
+
+            if entry_buy_complete == True:
+                pass
+
+            """
+            for x in range(0, 30):
+                tick = self.ticker(self.market)
+                logger.debug('tick: ' + str(tick))
+
+                time.sleep(0.5)
+            """
 
         except Exception as e:
             logger.exception('Exception in exec_trade().')
@@ -190,3 +233,6 @@ if __name__ == '__main__':
                                                  profit_level=test_profit_level, stop_level=test_stop_level,
                                                  spend_proportion=test_spend_proportion, entry_timeout=test_entry_timeout)
     logger.debug('create_trade_result: ' + str(create_trade_result))
+
+    if create_trade_result == True:
+        marcopolo.run_trade_cycle()

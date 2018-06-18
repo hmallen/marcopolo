@@ -6,13 +6,15 @@
     "max": 123,
     "actual": 123,
     "abort_time": xyz,
-    "complete": True
+    "complete": True,
+    "order_number": xyz
   },
   "sell": {
     "target": 0.00003603,
     "stop": 0.00003515,
     "actual": None,
-    "complete": False
+    "complete": False,
+    "order_number": None
   },
   "fees": {
     "maker": 0.001,
