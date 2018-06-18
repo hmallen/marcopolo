@@ -5,9 +5,10 @@ name = "pypi"
 
 [packages]
 poloniex = "*"
-pymongo = "*"
 websocket-client = "*"
 slackclient = "*"
+pymongo = {extras = ["tls"]}
+dnspython = "*"
 
 [dev-packages]
 

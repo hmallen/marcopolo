@@ -4,17 +4,20 @@
   "buy": {
     "target": 0.00003550,
     "max": 123,
-    "actual": 123,
+    "spend": 123,
+    "spend_actual": 123,
+    "price_actual": 123,
+    "amount_actual": 123,
     "abort_time": xyz,
     "complete": True,
-    "order_number": xyz
+    "orders": []
   },
   "sell": {
     "target": 0.00003603,
     "stop": 0.00003515,
     "actual": None,
     "complete": False,
-    "order_number": None
+    "orders": []
   },
   "fees": {
     "maker": 0.001,

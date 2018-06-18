@@ -1,3 +1,4 @@
+import argparse
 import configparser
 import datetime
 import json
@@ -10,9 +11,16 @@ from pymongo import MongoClient
 from slackclient import SlackClient
 import websocket
 
-config_path = '../config/config.ini'
+config_path_default = '../config/config.ini'
 
-mongo_ip_local = 'mongodb://192.168.1.179:27017/'
+parser = argparse.ArgumentParser()
+parser.add_argument('-c', '--config', type=str, default=config_path_default, help='Path to config file.')
+parser.add_argument('-a', '--atlas', action='store_true', default=False,
+                    help='Use MongoDB Atlas instead of local database.')
+args = parser.parse_args()
+
+use_mongodb_atlas = args.atlas
+config_path = args.config
 
 logging.basicConfig()
 logger = logging.getLogger(__name__)
@@ -24,7 +32,7 @@ class TickerGenerator(object):
     def __init__(self, slack_info, mongo_ip):
         self.api = Poloniex()
 
-        self.db = MongoClient(mongo_ip).poloniex['ticker']
+        self.db = MongoClient(mongo_uri).poloniex['ticker']
 
         self.db.drop()
 
@@ -350,8 +358,21 @@ if __name__ == "__main__":
 
         # websocket.enableTrace(True)
 
+        if use_mongodb_atlas == True:
+            atlas_user = config['mongodb']['atlas_user']
+            atlas_pass = config['mongodb']['atlas_pass']
+
+            cluster_uri = config['mongodb']['uri_atlas']
+
+            mongo_uri = 'mongodb+srv://' + atlas_user + ':' + atlas_pass + '@' + cluster_uri
+
+        else:
+            mongo_uri = config['mongodb']['uri_local']
+
+        logger.debug('mongo_uri: ' + mongo_uri)
+
         #ticker = Ticker(slack_info=slack_info, mongo_ip=mongo_ip_local)
-        ticker_generator = TickerGenerator(slack_info=slack_info, mongo_ip=mongo_ip_local)
+        ticker_generator = TickerGenerator(slack_info=slack_info, mongo_ip=mongo_uri)
 
         #logger.info('Starting ticker thread.')
         logger.info('Starting ticker generator in separate thread.')
@@ -375,17 +396,18 @@ if __name__ == "__main__":
         #last_update = ticker.last_update
         last_update = ticker_generator.last_update
 
-        """
-        error_timeout = datetime.timedelta(seconds=30)
+        if use_mongodb_atlas == True:
+            mongo_uri_preview = 'on MongoDB Atlas cluster:\n_mongodb+srv://{ATLAS_USER}:{ATLAS_PASS}@' + cluster_uri + '_'
 
-        error_message_sent = False
+        else:
+            if mongo_uri.split('.')[0].split('/')[-1] == '192':
+                location = 'local'
+            else:
+                location = 'remote'
 
-        error_message_time = None
+            mongo_uri_preview = 'at ' + location + ' ip:\n' + mongo_uri + ''
 
-        error_message_reset = datetime.timedelta(minutes=10)
-        """
-
-        slack_message = 'Real-time Poloniex ticker data ready for use at ' + mongo_ip_local + '.'
+        slack_message = 'Real-time Poloniex ticker data ready for use ' + mongo_uri_preview
 
         #slack_return = ticker.send_slack_alert(channel_id=slack_channel_id_alerts, message=slack_message)
         slack_return = ticker_generator.send_slack_alert(channel_id=slack_channel_id_alerts, message=slack_message)
