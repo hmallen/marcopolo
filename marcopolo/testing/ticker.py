@@ -204,7 +204,7 @@ class TickerGenerator(object):
 
         error_message_reset = datetime.timedelta(minutes=alert_reset_interval)
 
-        slack_message = '*_Monitor activated._*'
+        slack_message = '*MONITOR ACTIVE. TICKER READY FOR USE.*'
 
         #slack_return = ticker.send_slack_alert(channel_id=slack_channel_id_alerts, message=error_message)
         slack_return = TickerGenerator.send_slack_alert(self, channel_id=self.slack_channel_id_alerts, message=slack_message)
@@ -218,8 +218,7 @@ class TickerGenerator(object):
                 #if (time.time() - ticker.last_update) > error_timeout:
                 if (time.time() - self.last_update) > error_timeout:
                     if error_message_sent == False:
-                        error_message = '*NO TICKER DATA RECEIVED IN 30 SECONDS.*\n'
-                        error_message += 'Restarting websocket connection.'
+                        error_message = '*NO TICKER DATA RECEIVED IN 30 SECONDS. AN ERROR HAS OCCURRED THAT REQUIRES IMMEDIATE ATTENTION.*'
 
                         #slack_return = ticker.send_slack_alert(channel_id=slack_channel_id_alerts, message=error_message)
                         slack_return = TickerGenerator.send_slack_alert(self, channel_id=self.slack_channel_id_alerts, message=error_message)
@@ -229,27 +228,6 @@ class TickerGenerator(object):
                         error_message_sent = True
 
                         error_message_time = datetime.datetime.now()
-
-                        logger.info('Stopping websocket connection.')
-
-                        TickerGenerator.stop(self)
-
-                        time.sleep(5)
-
-                        logger.info('Restarting websocket connection.')
-
-                        TickerGenerator.start(self)
-
-                        time.sleep(5)
-
-                        logger.info('Websocket connection restored.')
-
-                        error_message += '*_Websocket connection restored._*'
-
-                        #slack_return = ticker.send_slack_alert(channel_id=slack_channel_id_alerts, message=error_message)
-                        slack_return = TickerGenerator.send_slack_alert(self, channel_id=self.slack_channel_id_alerts, message=error_message)
-
-                        logger.debug('slack_return: ' + str(slack_return))
 
                 if error_message_sent == True and (datetime.datetime.now() - error_message_time) > error_message_reset:
                     logger.info('Resetting error message sent switch to allow another alert.')
@@ -266,13 +244,6 @@ class TickerGenerator(object):
                 logger.info('Exit signal raised in TickerGenerator.monitor. Breaking from monitor loop.')
 
                 break
-
-        slack_message = '*_Monitor deactivated._*'
-
-        #slack_return = ticker.send_slack_alert(channel_id=slack_channel_id_alerts, message=error_message)
-        slack_return = TickerGenerator.send_slack_alert(self, channel_id=self.slack_channel_id_alerts, message=slack_message)
-
-        logger.debug('slack_return: ' + str(slack_return))
 
 
     def send_slack_alert(self, channel_id, message):
