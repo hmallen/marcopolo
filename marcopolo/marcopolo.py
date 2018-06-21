@@ -808,7 +808,7 @@ class MarcoPolo:
 
                                                 while (True):
                                                     if self.ws_ticker == True:
-                                                        tick = ticker(self.market)
+                                                        tick = self.ticker(self.market)
                                                     else:
                                                         tick = self.polo.returnTicker()[self.market]
 
