@@ -404,7 +404,7 @@ class MarcoPolo:
 
                         if lowest_ask <= self.buy_max:
                             #buy_amount = round(lowest_ask * (trade_doc['buy']['spend'] - spend_total), 8)
-                            buy_amount = round((trade_doc['buy']['spend']) / lowest_ask, 8)
+                            buy_amount = round((trade_doc['buy']['spend'] - spend_total) / lowest_ask, 8)
                             logger.debug('buy_amount: ' + str(buy_amount))
 
                             if buy_amount <= 0:
