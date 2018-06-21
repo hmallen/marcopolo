@@ -1,6 +1,7 @@
 import argparse
 import configparser
 import datetime
+import json
 import logging
 import multiprocessing as mp
 import os
@@ -34,7 +35,7 @@ logger.setLevel(logging.DEBUG)
 
 
 class MarcoPolo:
-    def __init__(self, config_path, ws_ticker=True, debug_mode=False):
+    def __init__(self, config_path, ws_ticker=True, slack_alerts=False, debug_mode=False):
         config = configparser.ConfigParser()
         config.read(config_path)
 
@@ -46,7 +47,7 @@ class MarcoPolo:
         self.db = MongoClient(mongo_ip).marcopolo['trades']
 
         #if drop_db == True:
-        self.db.drop()
+        #self.db.drop()
 
         #self.ticker = MongoClient(mongo_ip).poloniex['ticker']
         self.ticker = Ticker(mongo_ip)
@@ -57,7 +58,8 @@ class MarcoPolo:
 
 
     def create_trade(self, market, buy_target, profit_level, stop_level, stop_price=None,
-                     spend_proportion=0.01, price_tolerance=0.001, entry_timeout=5, taker_fee_ok=True):
+                     spend_proportion=0.01, price_tolerance=0.001, entry_timeout=5,
+                     taker_fee_ok=True, clean_db=False):
         create_trade_successful = True
 
         try:
@@ -172,14 +174,29 @@ class MarcoPolo:
                                              entry_timeout=entry_timeout,
                                              taker_fee_ok=taker_fee_ok))
 
+            if clean_db == True:
+                logger.info('Searching for old MongoDB trade document.')
+
+                try:
+                    find_result = self.db.find_one({'_id': self.market})
+                    logger.debug('find_result.matched_count: ' + str(find_result.matched_count))
+
+                    if find_result.matched_count > 0:
+                        logger.info('Deleting old MongoDB trade document.')
+
+                        delete_result = self.db.delete_one({'_id': self.market})
+                        logger.debug('delete_result.deleted_count: ' + str(delete_result.deleted_count))
+
+                    else:
+                        logger.info('No old MongoDB trade document found for deletion. [try]')
+
+                except:
+                    logger.info('No old MongoDB trade document found for deletion. [except]')
+
             logger.info('Creating MongoDB trade document.')
 
             try:
-                self.db.update_one(
-                    {'_id': self.market},
-                    {'$set': trade_doc},
-                    upsert=True
-                )
+                self.db.update_one({'_id': self.market}, {'$set': trade_doc}, upsert=True)
 
             except Exception as e:
                 logger.exception('Exception while creating MongoDB trade document.')
@@ -207,22 +224,6 @@ class MarcoPolo:
             trade_doc = self.db.find_one({'_id': self.market})
 
             candle_current = polo.returnChartData(currencyPair=self.market, period=300, start=(datetime.datetime.now().timestamp() - 301))[-1]
-
-            """
-            "order_trades": [
-                {
-                    "amount": 5.0,
-                    "currencyPair": "BTC_STR",
-                    "date": "2018-06-20 01:07:29",
-                    "fee": 0.002,
-                    "globalTradeID": 123456789,
-                    "rate": 3.451e-05,
-                    "total": 0.00017255,
-                    "tradeID": 12345678,
-                    "type": "sell"
-                }
-            ]
-            """
 
             if candle_current['high'] >= self.sell_price:
                 global_trade_id_debug += 1
@@ -364,7 +365,7 @@ class MarcoPolo:
             polo_data_file_debug = '../resources/polo_data.json'
 
             # Load debug order and trade data
-            with open(debug_polo_data_file, 'r', encoding='utf-8') as file:
+            with open(polo_data_file_debug, 'r', encoding='utf-8') as file:
                 polo_data_debug = json.load(file)
 
                 open_orders_debug = polo_data_debug['open_orders']
@@ -474,13 +475,13 @@ class MarcoPolo:
                     logger.exception(e)
 
             if entry_buy_complete == True:
-                trade_doc['buy']['spend_actual'] = spend_total
-                trade_doc['buy']['amount_actual'] = amount_total
+                trade_doc['buy']['spend_actual'] = round(spend_total, 8)
+                trade_doc['buy']['amount_actual'] = round(amount_total, 8)
                 trade_doc['buy']['price_actual'] = round(spend_total / amount_total, 8)
 
                 trade_doc['buy']['complete'] = True
 
-                trade_doc['sell']['amount'] = amount_total
+                trade_doc['sell']['amount'] = round(amount_total, 8)
 
                 update_result = self.db.update_one({'_id': self.market}, {'$set': trade_doc}, upsert=True)
                 logger.debug('update_result.matched_count: ' + str(update_result.matched_count))
@@ -627,8 +628,19 @@ class MarcoPolo:
                             if self.debug_mode == False:
                                 open_orders = polo.returnOpenOrders(currencyPair=self.market)
                             else:
+                                # Simulate sell if target price has been reached
+                                debug_triggers()
+
                                 #open_orders = trade_doc['sell']['orders']
                                 open_orders = generate_debug_order(order_type='open_orders')
+
+                                if open_orders['success'] == True:
+                                    open_orders = open_orders['result']
+
+                                else:
+                                    logger.error('Failed to generate debug trade return. Exiting.')
+
+                                    sys.exit(1)
 
                             for order in open_orders:
                                 if order['orderNumber'] == trade_doc['sell']['order']:
@@ -641,6 +653,16 @@ class MarcoPolo:
                                     order_trades = polo.returnOrderTrades(trade_doc['sell']['order'])
                                 else:
                                     order_trades = generate_debug_order(order_type='order_trades')
+
+                                    if order_trades['success'] == True:
+                                        order_trades = order_trades['result']
+
+                                    else:
+                                        logger.error('Failed to generate debug trade return. Exiting.')
+
+                                        sys.exit(1)
+
+                                logger.debug('order_trades: ' + str(order_trades))
 
                                 if len(order_trades) > 0:
                                     # Calculate actuals
@@ -683,9 +705,9 @@ class MarcoPolo:
 
                     ## Stop-loss monitoring active
                     else:
-                        logger.debug('highest_bid: ' + str(highest_bid) + ' / self.threshold: ' + str(self.threshold))
-
                         logger.info('Starting stop-loss trigger monitor.')
+
+                        stop_monitor_start = 0
 
                         while (True):
                             # Monitor for stop-loss condition and execute if necessary
@@ -695,6 +717,11 @@ class MarcoPolo:
                                 tick = polo.returnTicker()[self.market]
 
                             highest_bid = tick['highestBid']
+
+                            if (time.time() - stop_monitor_start) > 300:
+                                logger.debug('highest_bid: ' + str(highest_bid) + ' / self.threshold: ' + str(self.threshold))
+
+                                stop_monitor_start = time.time()
 
                             if highest_bid > self.threshold:
                                 while (True):
@@ -742,6 +769,8 @@ class MarcoPolo:
                                 update_result = self.db.update_one({'_id': self.market}, {'$set': trade_doc})
                                 logger.debug('update_result.matched_count: ' + str(update_result.matched_count))
                                 logger.debug('update_result.modified_count: ' + str(update_result.modified_count))
+
+                                break
 
                             elif highest_bid <= (self.stop_price * (1 + self.price_tolerance)):
                                 # Begin orderbook checks for stop-loss triggering
@@ -878,7 +907,7 @@ if __name__ == '__main__':
         create_trade_result = marcopolo.create_trade(market=test_market, buy_target=test_buy_target,
                                                      profit_level=test_profit_level, stop_level=test_stop_level,
                                                      spend_proportion=test_spend_proportion, entry_timeout=test_entry_timeout,
-                                                     price_tolerance=0.0025)
+                                                     price_tolerance=0.0025, clean_db=True)
 
         logger.debug('create_trade_result: ' + str(create_trade_result))
 
