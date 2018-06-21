@@ -400,10 +400,11 @@ class MarcoPolo:
 
                         lowest_ask = tick['lowestAsk']
 
-                        logger.debug('lowest_ask: ' + str(lowest_ask) + ' / self.buy_max: ' + str(self.buy_max))
+                        logger.info('Lowest Ask: ' + str(lowest_ask) + ' / Max. Buy Price: ' + str(self.buy_max) + ' ' + self.base_currency)
 
                         if lowest_ask <= self.buy_max:
-                            buy_amount = round(lowest_ask * (trade_doc['buy']['spend'] - spend_total), 8)
+                            #buy_amount = round(lowest_ask * (trade_doc['buy']['spend'] - spend_total), 8)
+                            buy_amount = round((trade_doc['buy']['spend']) / lowest_ask, 8)
                             logger.debug('buy_amount: ' + str(buy_amount))
 
                             if buy_amount <= 0:
@@ -556,6 +557,8 @@ class MarcoPolo:
 
             logger.info('Beginning price monitoring.')
 
+            main_monitor_start = 0
+
             while (True):
                 try:
                     ## Monitor price/sell order status and execute stop-loss if necessary ##
@@ -572,7 +575,10 @@ class MarcoPolo:
 
                         highest_bid = tick['highestBid']
 
-                        logger.debug('highest_bid: ' + str(highest_bid) + ' / self.threshold: ' + str(self.threshold))
+                        if (time.time() - main_monitor_start) > 300:
+                            logger.debug('highest_bid: ' + str(highest_bid) + ' / self.threshold: ' + str(self.threshold))
+
+                            main_monitor_start = time.time()
 
                         if highest_bid < self.threshold:
                             logger.info('Highest bid below stop-loss monitoring threshold. Canceling current sell order.')
@@ -724,6 +730,8 @@ class MarcoPolo:
                                 stop_monitor_start = time.time()
 
                             if highest_bid > self.threshold:
+                                logger.info('Price above stop-loss monitoring threshold. Placing sell order.')
+
                                 while (True):
                                     try:
                                         ## Place sell order ##
@@ -773,6 +781,8 @@ class MarcoPolo:
                                 break
 
                             elif highest_bid <= (self.stop_price * (1 + self.price_tolerance)):
+                                logger.info('Price approaching stop-loss trigger level. Beginning orderbook monitoring.')
+
                                 # Begin orderbook checks for stop-loss triggering
                                 if self.ws_ticker == True:
                                     tick = self.ticker(self.market)
@@ -848,7 +858,6 @@ class MarcoPolo:
 
                                     time.sleep(0.2)
 
-                    #time.sleep(0.2)
                     time.sleep(5)
 
                 except Exception as e:
@@ -886,7 +895,7 @@ if __name__ == '__main__':
             debug_switch = True
 
         ################
-        ws_ticker_switch = False
+        ws_ticker_switch = True
         ################
 
         marcopolo = MarcoPolo(config_path=test_config_path, ws_ticker=ws_ticker_switch, debug_mode=debug_switch)
