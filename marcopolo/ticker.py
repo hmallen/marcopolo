@@ -219,7 +219,7 @@ class TickerGenerator(object):
                 if (time.time() - self.last_update) > error_timeout:
                     if error_message_sent == False:
                         error_message = '*NO TICKER DATA RECEIVED IN 30 SECONDS.*\n'
-                        error_message += 'Restarting websocket connection.'
+                        error_message += 'Restarting websocket connection.\n'
 
                         #slack_return = ticker.send_slack_alert(channel_id=slack_channel_id_alerts, message=error_message)
                         slack_return = TickerGenerator.send_slack_alert(self, channel_id=self.slack_channel_id_alerts, message=error_message)
