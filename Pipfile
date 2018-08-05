@@ -1,9 +1,12 @@
 [[source]]
+
 url = "https://pypi.org/simple"
 verify_ssl = true
 name = "pypi"
 
+
 [packages]
+
 poloniex = "*"
 websocket-client = "*"
 slackclient = "*"
@@ -14,8 +17,13 @@ pyopenssl = "*"
 service-identity = "*"
 "pypiwin32" = "*"
 asyncio = "*"
+cryptography = "*"
+
 
 [dev-packages]
 
+
+
 [requires]
+
 python_version = "3.6"
